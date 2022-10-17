@@ -23,6 +23,7 @@ from utils.loss import WeightedBCEWithLogitsLoss
 from dataset.gta5_dataset import GTA5DataSet
 from dataset.synthia_dataset import SYNTHIADataSet
 from dataset.cityscapes_dataset import cityscapesDataSet
+from dataset.DomainNet import DomainNet
 #import matplotlib.pyplot as plt
 #from PIL import Image
 import imageio
@@ -39,8 +40,9 @@ NUM_WORKERS = 2
 IGNORE_LABEL = 255
 
 MOMENTUM = 0.9
-NUM_CLASSES = 19
+NUM_CLASSES = 65 #19
 RESTORE_FROM = './pretrained/DeepLab_resnet_pretrained_init-f81d91e8.pth'
+RESTORE_FROM = './pretrained/resnet50-19c8e357.pth'
 #RESTORE_FROM = './snapshots/GTA2Cityscapes_CLAN/GTA5_20000.pth' #For retrain
 #RESTORE_FROM_D = './snapshots/GTA2Cityscapes_CLAN/GTA5_20000_D.pth' #For retrain
 
@@ -58,8 +60,8 @@ WARMUP_STEPS = int(NUM_STEPS_STOP/20)
 POWER = 0.9
 RANDOM_SEED = 1234
 
-SOURCE = 'GTA5'
-TARGET = 'cityscapes'
+SOURCE = 'Domainnet_clipart' #'GTA5'
+TARGET = 'Domainnet_painting' #cityscapes'
 SET = 'train'
 
 if SOURCE == 'GTA5':
@@ -78,10 +80,21 @@ elif SOURCE == 'SYNTHIA':
     Lambda_adv = 0.001
     Lambda_local = 10
     Epsilon = 0.4
+elif SOURCE == 'Domainnet_clipart':
+    INPUT_SIZE_SOURCE = '224,224'
+    DATA_DIRECTORY = '/home/skadam/workspace/datasets/domainnet/'
+    DATA_LIST_PATH = '/home/skadam/workspace/datasets/domainnet/clipart_train.txt'
+    Lambda_weight = 0.01
+    Lambda_adv = 0.001
+    Lambda_local = 10
+    Epsilon = 0.4
 
-INPUT_SIZE_TARGET = '1024,512'
-DATA_DIRECTORY_TARGET = '/data02/yawei/Data/Cityscapes/'
-DATA_LIST_PATH_TARGET = './dataset/cityscapes_list/train.txt'
+#INPUT_SIZE_TARGET = '1024,512'
+#DATA_DIRECTORY_TARGET = '/data02/yawei/Data/Cityscapes/'
+#DATA_LIST_PATH_TARGET = './dataset/cityscapes_list/train.txt'
+INPUT_SIZE_TARGET = '224,224'
+DATA_DIRECTORY_TARGET = '/home/skadam/workspace/datasets/domainnet/'
+DATA_LIST_PATH_TARGET = '/home/skadam/workspace/datasets/domainnet/painting_train.txt'
 
 
 def get_arguments():
@@ -353,20 +366,30 @@ def main():
                         crop_size=input_size_source,
                         scale=False, mirror=False, mean=IMG_MEAN),
             batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
-    else:
+    elif args.source == 'Synthia':
         trainloader = data.DataLoader(
             SYNTHIADataSet(args.data_dir, args.data_list, max_iters=args.num_steps * args.iter_size * args.batch_size,
                         crop_size=input_size_source,
                         scale=True, mirror=False, mean=IMG_MEAN),
             batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
+    elif args.source == 'Domainnet_clipart':
+        trainloader = data.DataLoader(
+            DomainNet(args.data_dir, args.data_list, 
+                        crop_size=input_size_source),
+            batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
     trainloader_iter = enumerate(trainloader)
 
-    targetloader = data.DataLoader(cityscapesDataSet(args.data_dir_target, args.data_list_target,
-                                                     max_iters=args.num_steps * args.iter_size * args.batch_size,
-                                                     crop_size=input_size_target,
-                                                     scale=False, mirror=False, mean=IMG_MEAN,
-                                                     set=args.set),
+    # targetloader = data.DataLoader(cityscapesDataSet(args.data_dir_target, args.data_list_target,
+    #                                                  max_iters=args.num_steps * args.iter_size * args.batch_size,
+    #                                                  crop_size=input_size_target,
+    #                                                  scale=False, mirror=False, mean=IMG_MEAN,
+    #                                                  set=args.set),
+    #                                batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers,
+    #                                pin_memory=True)
+
+    targetloader = data.DataLoader(DomainNet(args.data_dir_target, args.data_list_target,
+                                                     crop_size=input_size_target),
                                    batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers,
                                    pin_memory=True)
 
@@ -389,9 +412,9 @@ def main():
 
 
     _, batch_t = next(targetloader_iter)
-    images_t, images_t_rgb, _, _ = batch_t
+    images_t, labels_t, _, _ = batch_t
     images_t = Variable(images_t).cuda(args.gpu)
-    images_t_rgb = Variable(images_t_rgb).cuda(args.gpu)
+    images_t_rgb = Variable(images_t).cuda(args.gpu)
     images_t.requires_grad = False
     images_t_rgb.requires_grad = False
 
@@ -406,11 +429,12 @@ def main():
         # Train with Source
         _, batch_s = next(trainloader_iter)
 
-        images_s, labels_s, images_s_rgb, _, _ = batch_s
+        images_s, labels_s, _, _ = batch_s
 
         images_s = Variable(images_s).cuda(args.gpu)
 
-        images_s_rgb = Variable(images_s_rgb).cuda(args.gpu)
+        #images_s_rgb = Variable(images_s_rgb).cuda(args.gpu)
+        images_s_rgb = Variable(images_s).cuda(args.gpu)
 
         images_s.requires_grad = False
 
@@ -420,8 +444,7 @@ def main():
         for i in range(2):
 
             optimizer.zero_grad()
-            images_s_style, sampling = style_transfer(vgg_encoder, vgg_decoder,
-                                                          style_encoder, style_decoder, images_s_rgb, images_t_rgb, sampling)
+            images_s_style, sampling = style_transfer(vgg_encoder, vgg_decoder, style_encoder, style_decoder, images_s_rgb, images_t_rgb, sampling)
             indices = torch.tensor([2,1,0]).cuda()
             images_s_style = torch.index_select(images_s_style, dim = 1, index = indices) * 255.0 - torch.FloatTensor(IMG_MEAN).cuda().view(1,3,1,1)
 

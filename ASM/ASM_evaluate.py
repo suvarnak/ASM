@@ -11,10 +11,15 @@ import torch.nn as nn
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 
-DATA_DIRECTORY = '/data02/yawei/Data/Cityscapes/'
-DATA_LIST_PATH = './dataset/cityscapes_list/val.txt'
-SAVE_PATH = './result/cityscapes'
-RESTORE_FROM = 'http://vllab.ucmerced.edu/ytsai/CVPR18/GTA2Cityscapes_multi-ed35151c.pth'
+# DATA_DIRECTORY = '/data02/yawei/Data/Cityscapes/'
+# DATA_LIST_PATH = './dataset/cityscapes_list/val.txt'
+# SAVE_PATH = './result/cityscapes'
+# RESTORE_FROM = 'http://vllab.ucmerced.edu/ytsai/CVPR18/GTA2Cityscapes_multi-ed35151c.pth'
+DATA_DIRECTORY = '/home/skadam/workspace/datasets/domainnet/painting'
+DATA_LIST_PATH = '/home/skadam/workspace/datasets/domainnet/painting_test.txt'
+SAVE_PATH = './result/domainent/painting'
+#RESTORE_FROM = 'http://vllab.ucmerced.edu/ytsai/CVPR18/GTA2Cityscapes_multi-ed35151c.pth'
+
 IGNORE_LABEL = 255
 NUM_CLASSES = 19
 NUM_STEPS = 500 # Number of images in the validation set.
